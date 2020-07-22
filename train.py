@@ -42,27 +42,36 @@ def get_arguments():
     # Network Structure
     parser.add_argument("--arch", type=str, default='resnet101')
     # Data Preference
-    parser.add_argument("--data-dir", type=str, default='./data/LIP')
+    parser.add_argument("--data-dir", type=str,
+                        # default='/home/qiu/Downloads/datasets/LIP'
+                        default='/home/qiu/Downloads/datasets/ICCV15_fashion_dataset(ATR)/humanparsing'
+                        )
     parser.add_argument("--batch-size", type=int, default=16)
-    parser.add_argument("--input-size", type=str, default='473,473')
-    parser.add_argument("--num-classes", type=int, default=20)
+    parser.add_argument("--input-size", type=str,
+                        # default='473,473'
+                        # default='512,512'
+                        default='256,256'
+                        )
+    parser.add_argument("--num-classes", type=int, default=18)
     parser.add_argument("--ignore-label", type=int, default=255)
     parser.add_argument("--random-mirror", action="store_true")
     parser.add_argument("--random-scale", action="store_true")
     # Training Strategy
-    parser.add_argument("--learning-rate", type=float, default=7e-3)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--momentum", type=float, default=0.9)
     parser.add_argument("--weight-decay", type=float, default=5e-4)
-    parser.add_argument("--gpu", type=str, default='0,1,2')
+    parser.add_argument("--gpu", type=str, default='0')
     parser.add_argument("--start-epoch", type=int, default=0)
-    parser.add_argument("--epochs", type=int, default=150)
-    parser.add_argument("--eval-epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--eval-epochs", type=int, default=5)
     parser.add_argument("--imagenet-pretrain", type=str, default='./pretrain_model/resnet101-imagenet.pth')
     parser.add_argument("--log-dir", type=str, default='./log')
-    parser.add_argument("--model-restore", type=str, default='./log/checkpoint.pth.tar')
+    parser.add_argument("--model-restore", type=str,
+                        default='./log/checkpoint.pth.tar')
     parser.add_argument("--schp-start", type=int, default=100, help='schp start epoch')
     parser.add_argument("--cycle-epochs", type=int, default=10, help='schp cyclical epoch')
-    parser.add_argument("--schp-restore", type=str, default='./log/schp_checkpoint.pth.tar')
+    parser.add_argument("--schp-restore", type=str,
+                        default='./log/schp_checkpoint.pth.tar')
     parser.add_argument("--lambda-s", type=float, default=1, help='segmentation loss weight')
     parser.add_argument("--lambda-e", type=float, default=1, help='edge loss weight')
     parser.add_argument("--lambda-c", type=float, default=0.1, help='segmentation-edge consistency loss weight')
@@ -70,6 +79,7 @@ def get_arguments():
 
 
 def main():
+    pre_ckpt = '/home/qiu/Downloads/models/SCHP/exp-schp-201908261155-lip.pth'
     args = get_arguments()
     print(args)
 
@@ -93,7 +103,10 @@ def main():
     # Model Initialization
     AugmentCE2P = networks.init_model(args.arch, num_classes=args.num_classes, pretrained=args.imagenet_pretrain)
     model = DataParallelModel(AugmentCE2P)
+    # model=AugmentCE2P
     model.cuda()
+    from torchsummary import summary
+    # summary(model, (3, 256, 256))
 
     IMAGE_MEAN = AugmentCE2P.mean
     IMAGE_STD = AugmentCE2P.std
@@ -108,9 +121,18 @@ def main():
         checkpoint = torch.load(restore_from)
         model.load_state_dict(checkpoint['state_dict'])
         start_epoch = checkpoint['epoch']
+        start_epoch = 0
 
     SCHP_AugmentCE2P = networks.init_model(args.arch, num_classes=args.num_classes, pretrained=args.imagenet_pretrain)
     schp_model = DataParallelModel(SCHP_AugmentCE2P)
+    # schp_model=SCHP_AugmentCE2P
+    # state_dict = torch.load(pre_ckpt)['state_dict']
+    # from collections import OrderedDict
+    # new_state_dict = state_dict
+    #
+    # model.load_state_dict(new_state_dict)
+    # schp_model.load_state_dict(new_state_dict)
+
     schp_model.cuda()
 
     if os.path.exists(args.schp_restore):
@@ -118,6 +140,7 @@ def main():
         schp_checkpoint = torch.load(args.schp_restore)
         schp_model_state_dict = schp_checkpoint['state_dict']
         cycle_n = schp_checkpoint['cycle_n']
+        # cycle_n = 0
         schp_model.load_state_dict(schp_model_state_dict)
 
     # Loss Function
@@ -161,7 +184,7 @@ def main():
     total_iters = args.epochs * len(train_loader)
     start = timeit.default_timer()
     for epoch in range(start_epoch, args.epochs):
-        lr_scheduler.step(epoch=epoch)
+
         lr = lr_scheduler.get_lr()[0]
 
         model.train()
@@ -197,6 +220,7 @@ def main():
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            lr_scheduler.step()
 
             if i_iter % 100 == 0:
                 print('iter = {} of {} completed, lr = {}, loss = {}'.format(i_iter, total_iters, lr,

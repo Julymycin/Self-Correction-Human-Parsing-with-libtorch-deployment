@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+project(custom_ops)
+
+set(Torch_DIR  /home/qiu/Projects/libtorch/libtorch-cxx11-abi-shared-with-deps-1.5.1+cu101/libtorch/share/cmake/Torch)
+set(CMAKE_PREFIX_PATH /home/qiu/Projects/libtorch/libtorch-cxx11-abi-shared-with-deps-1.5.1+cu101/libtorch/)
+find_package(Torch REQUIRED)
+find_package(OpenCV REQUIRED)
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+message(STATUS "Pytorch status:")
+message(STATUS "libraries: ${TORCH_LIBRARIES}")
+message(STATUS "libraries: ${OpenCV_LIBS}")
+add_executable(schp_infer schp_infer.cpp)
+target_link_libraries(schp_infer "${TORCH_LIBRARIES}" "${OpenCV_LIBS}")
+
+set_property(TARGET schp_infer PROPERTY CXX_STANDARD 14)

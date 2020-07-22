@@ -18,9 +18,12 @@ import torch.nn as nn
 from torch.nn import functional as F
 # Note here we adopt the InplaceABNSync implementation from https://github.com/mapillary/inplace_abn
 # By default, the InplaceABNSync module contains a BatchNorm Layer and a LeakyReLu layer
-from modules import InPlaceABNSync
+from modules import InPlaceABNSync, InPlaceABN, ABN
+# from torch.nn import BatchNorm2d, LeakyReLU
 
-BatchNorm2d = functools.partial(InPlaceABNSync, activation='none')
+# BatchNorm2d = functools.partial(InPlaceABNSync, activation='none')
+BatchNorm2d = functools.partial(ABN, activation='none')
+
 
 affine_par = True
 
@@ -99,13 +102,17 @@ class PSPModule(nn.Module):
         self.bottleneck = nn.Sequential(
             nn.Conv2d(features + len(sizes) * out_features, out_features, kernel_size=3, padding=1, dilation=1,
                       bias=False),
-            InPlaceABNSync(out_features),
+            ABN(out_features),
+            # BatchNorm2d(out_features),
+            # LeakyReLU()
         )
 
     def _make_stage(self, features, out_features, size):
         prior = nn.AdaptiveAvgPool2d(output_size=(size, size))
         conv = nn.Conv2d(features, out_features, kernel_size=1, bias=False)
-        bn = InPlaceABNSync(out_features)
+        bn = ABN(out_features)
+        # bn = BatchNorm2d(out_features)
+        # ac = LeakyReLU()
         return nn.Sequential(prior, conv, bn)
 
     def forward(self, feats):
@@ -118,7 +125,7 @@ class PSPModule(nn.Module):
 
 class ASPPModule(nn.Module):
     """
-    Reference: 
+    Reference:
         Chen, Liang-Chieh, et al. *"Rethinking Atrous Convolution for Semantic Image Segmentation."*
     """
 
@@ -128,23 +135,35 @@ class ASPPModule(nn.Module):
         self.conv1 = nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)),
                                    nn.Conv2d(features, inner_features, kernel_size=1, padding=0, dilation=1,
                                              bias=False),
-                                   InPlaceABNSync(inner_features))
+                                   ABN(inner_features))
+                                   # BatchNorm2d(inner_features),
+                                   # LeakyReLU())
         self.conv2 = nn.Sequential(
             nn.Conv2d(features, inner_features, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(inner_features))
+            ABN(inner_features))
+            # BatchNorm2d(inner_features),
+            # LeakyReLU())
         self.conv3 = nn.Sequential(
             nn.Conv2d(features, inner_features, kernel_size=3, padding=dilations[0], dilation=dilations[0], bias=False),
-            InPlaceABNSync(inner_features))
+            ABN(inner_features))
+            # BatchNorm2d(inner_features),
+            # LeakyReLU())
         self.conv4 = nn.Sequential(
             nn.Conv2d(features, inner_features, kernel_size=3, padding=dilations[1], dilation=dilations[1], bias=False),
-            InPlaceABNSync(inner_features))
+            ABN(inner_features))
+            # BatchNorm2d(inner_features),
+            # LeakyReLU())
         self.conv5 = nn.Sequential(
             nn.Conv2d(features, inner_features, kernel_size=3, padding=dilations[2], dilation=dilations[2], bias=False),
-            InPlaceABNSync(inner_features))
+            ABN(inner_features))
+            # BatchNorm2d(inner_features),
+            # LeakyReLU())
 
         self.bottleneck = nn.Sequential(
             nn.Conv2d(inner_features * 5, out_features, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(out_features),
+            ABN(out_features),
+            # BatchNorm2d(out_features),
+            # LeakyReLU(),
             nn.Dropout2d(0.1)
         )
 
@@ -173,15 +192,21 @@ class Edge_Module(nn.Module):
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_fea[0], mid_fea, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(mid_fea)
+            ABN(mid_fea)
+            # BatchNorm2d(mid_fea),
+            # LeakyReLU()
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(in_fea[1], mid_fea, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(mid_fea)
+            ABN(mid_fea)
+            # BatchNorm2d(mid_fea),
+            # LeakyReLU()
         )
         self.conv3 = nn.Sequential(
             nn.Conv2d(in_fea[2], mid_fea, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(mid_fea)
+            ABN(mid_fea)
+            # BatchNorm2d(mid_fea),
+            # LeakyReLU()
         )
         self.conv4 = nn.Conv2d(mid_fea, out_fea, kernel_size=3, padding=1, dilation=1, bias=True)
         self.conv5 = nn.Conv2d(out_fea * 3, out_fea, kernel_size=1, padding=0, dilation=1, bias=True)
@@ -217,17 +242,25 @@ class Decoder_Module(nn.Module):
         super(Decoder_Module, self).__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(512, 256, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(256)
+            ABN(256)
+            # BatchNorm2d(256),
+            # LeakyReLU()
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(256, 48, kernel_size=1, stride=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(48)
+            ABN(48)
+            # BatchNorm2d(48),
+            # LeakyReLU()
         )
         self.conv3 = nn.Sequential(
             nn.Conv2d(304, 256, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(256),
+            ABN(256),
+            # BatchNorm2d(256),
+            # LeakyReLU(),
             nn.Conv2d(256, 256, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(256)
+            ABN(256)
+            # BatchNorm2d(256),
+            # LeakyReLU()
         )
 
         self.conv4 = nn.Conv2d(256, num_classes, kernel_size=1, padding=0, dilation=1, bias=True)
@@ -270,7 +303,9 @@ class ResNet(nn.Module):
 
         self.fushion = nn.Sequential(
             nn.Conv2d(1024, 256, kernel_size=1, padding=0, dilation=1, bias=False),
-            InPlaceABNSync(256),
+            ABN(256),
+            # BatchNorm2d(256),
+            # LeakyReLU(),
             nn.Dropout2d(0.1),
             nn.Conv2d(256, num_classes, kernel_size=1, padding=0, dilation=1, bias=True)
         )
@@ -310,7 +345,9 @@ class ResNet(nn.Module):
         # Fusion Branch
         x = torch.cat([parsing_fea, edge_fea], dim=1)
         fusion_result = self.fushion(x)
-        return [[parsing_result, fusion_result], [edge_result]]
+        # return [[parsing_result, fusion_result], [edge_result]]
+        # return ([parsing_result, fusion_result], [edge_result])
+        return fusion_result
 
 
 def initialize_pretrained_model(model, settings, pretrained='./models/resnet101-imagenet.pth'):
