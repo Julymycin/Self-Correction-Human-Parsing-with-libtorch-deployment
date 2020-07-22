@@ -3,6 +3,21 @@
 ![Python 3.6](https://img.shields.io/badge/python-3.6-green.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
+**This repo aims to deploy these model with pretrained checpoint to libtorch.**
+
+* Note that replacing InPlaceABN layers with ABN layers will cost about 80% more GPU memory.
+
+* Step1: Replace InPlaceABN layers in /networks/AugmentCE2P.py with ABN layers.(Already done in this repo's codes, also changed the output of the network to a Tensor, instead of a Tuple)
+
+* Step2: Run IABN2ABN.py to load the pretrained checkpoint, and then change  the `*.bn*.weight` to `abs(*.bn*.weight)+eps` in the checkpoint.
+
+* Step3: Run /deploy/torch2lib.py to get the libtorch model.
+
+* Step4: /deploy/schp_libtorch/ is for inference using SCHP on C++ runtime.
+
+
+
+
 An out-of-box human parsing representation extractor.
 
 Our solution ranks 1st for all human parsing tracks (including single, multiple and video) in the third LIP challenge!
