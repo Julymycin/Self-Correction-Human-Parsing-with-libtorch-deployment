@@ -22,6 +22,8 @@ from PIL import Image as PILImage
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 
+import sys
+sys.path.append('/home/qiu/Projects/Self-Correction-Human-Parsing/')
 import networks
 from utils.miou import compute_mean_ioU
 from utils.transforms import BGR2RGB_transform
@@ -40,17 +42,17 @@ def get_arguments():
     # Network Structure
     parser.add_argument("--arch", type=str, default='resnet101')
     # Data Preference
-    parser.add_argument("--data-dir", type=str, default='./data/LIP')
+    parser.add_argument("--data-dir", type=str, default='mhp_extension/data/DemoDataset')
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--split-name", type=str, default='crop_pic')
     parser.add_argument("--input-size", type=str, default='473,473')
-    parser.add_argument("--num-classes", type=int, default=20)
+    parser.add_argument("--num-classes", type=int, default=7)
     parser.add_argument("--ignore-label", type=int, default=255)
     parser.add_argument("--random-mirror", action="store_true")
     parser.add_argument("--random-scale", action="store_true")
     # Evaluation Preference
-    parser.add_argument("--log-dir", type=str, default='./log')
-    parser.add_argument("--model-restore", type=str, default='./log/checkpoint.pth.tar')
+    parser.add_argument("--log-dir", type=str, default='mhp_extension/data/DemoDataset')
+    parser.add_argument("--model-restore", type=str, default='/home/qiu/Downloads/models/detectron2/exp_schp_multi_cihp_local.pth')
     parser.add_argument("--gpu", type=str, default='0', help="choose gpu device.")
     parser.add_argument("--save-results", action="store_true", help="whether to save the results.")
     parser.add_argument("--flip", action="store_true", help="random flip during the test.")
@@ -97,6 +99,7 @@ def multi_scale_testing(model, batch_input_im, crop_size=[473, 473], flip=True, 
         parsing_output = model(scaled_im)
         parsing_output = parsing_output[0][-1]
         output = parsing_output[0]
+        # print(output.shape)
         if flip:
             flipped_output = parsing_output[1]
             flipped_output[14:20, :, :] = flipped_output[flipped_idx, :, :]
@@ -162,12 +165,13 @@ def main():
 
     # Load model weight
     state_dict = torch.load(args.model_restore)
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k[7:]  # remove `module.`
-        new_state_dict[name] = v
-    model.load_state_dict(new_state_dict)
+    model.load_state_dict(state_dict)
+    # from collections import OrderedDict
+    # new_state_dict = OrderedDict()
+    # for k, v in state_dict.items():
+    #     name = k[7:]  # remove `module.`
+    #     new_state_dict[name] = v
+    # model.load_state_dict(new_state_dict)
     model.cuda()
     model.eval()
 

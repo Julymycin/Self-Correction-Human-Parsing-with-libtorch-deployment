@@ -101,13 +101,13 @@ def get_arguments():
     parser.add_argument("--overlap_threshold", type=float, default=0.5)
     parser.add_argument("--conf_thres", type=float, default=0.5)
     parser.add_argument("--img_dir", type=str,
-                        default='/data03/v_xuyunqiu/data/instance-level_human_parsing/Testing/Images')
+                        default='./data/DemoDataset/global_pic')
     parser.add_argument("--save_dir", type=str,
-                        default='/data03/v_xuyunqiu/Projects/experiment_data/testing/resnest_200_TTA_mask_nms_all_data')
+                        default='./data/DemoDataset')
     parser.add_argument("--img_list", type=str,
-                        default='/data03/v_xuyunqiu/Projects/pycococreator/annotations/CIHP_test.json')
+                        default='./data/DemoDataset/msrcnn_finetune_annotations/Demo.json')
     parser.add_argument("--det_res", type=str,
-                        default='/data02/v_xuyunqiu/detectron2-ResNeSt/tools/output_cihp_inference_resnest/inference_TTA/instances_predictions.pth')
+                        default='./data/DemoDataset/detectron2_prediction/inference/instances_predictions.pth')
     return parser.parse_args()
 
 

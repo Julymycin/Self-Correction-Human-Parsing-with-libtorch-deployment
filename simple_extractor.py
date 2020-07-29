@@ -110,72 +110,7 @@ def get_palette(num_cls):
     return palette
 
 
-# def fuse_bn_to_conv(bn_layer, conv_layer):
-#     # print('bn fuse')
-#     bn_st_dict = bn_layer.state_dict()
-#     conv_st_dict = conv_layer.state_dict()
-#
-#     # BatchNorm params
-#     eps = bn_layer.eps
-#     mu = bn_st_dict['running_mean']
-#     var = bn_st_dict['running_var']
-#     gamma = bn_st_dict['weight']
-#
-#     if 'bias' in bn_st_dict:
-#         beta = bn_st_dict['bias']
-#     else:
-#         beta = torch.zeros(gamma.size(0)).float().to(gamma.device)
-#
-#     # Conv params
-#     W = conv_st_dict['weight']
-#     if 'bias' in conv_st_dict:
-#         bias = conv_st_dict['bias']
-#     else:
-#         bias = torch.zeros(W.size(0)).float().to(gamma.device)
-#
-#     denom = torch.sqrt(var + eps)
-#     b = beta - gamma.mul(mu).div(denom)
-#     A = gamma.div(denom)
-#     bias *= A
-#     A = A.expand_as(W.transpose(0, -1)).transpose(0, -1)
-#
-#     W.mul_(A)
-#     bias.add_(b)
-#
-#     conv_layer.weight.data.copy_(W)
-#     if conv_layer.bias is None:
-#         conv_layer.bias = torch.nn.Parameter(bias)
-#     else:
-#         conv_layer.bias.data.copy_(bias)
-#
-#
-# def extract_layers(model):
-#     list_layers = []
-#     for n, p in model.named_modules():
-#         list_layers.append(n)
-#     return list_layers
-#
-#
-# def compute_next_bn(layer_name, resnet):
-#     list_layer = extract_layers(resnet)
-#     assert layer_name in list_layer
-#     if layer_name == list_layer[-1]:
-#         return None
-#     next_bn = list_layer[list_layer.index(layer_name) + 1]
-#     if extract_layer(resnet, next_bn).__class__.__name__ == 'BatchNorm2d':
-#         return next_bn
-#     return None
-#
-#
-# def fuse_bn(model):
-#     for n, m in model.named_modules():
-#         if isinstance(m, nn.Conv2d):
-#             next_bn = compute_next_bn(n, model)
-#             if next_bn is not None:
-#                 next_bn_ = extract_layer(model, next_bn)
-#                 fuse_bn_to_conv(next_bn_, m)
-#                 set_layer(model, next_bn, nn.Identity())
-#     return model
+
 
 
 def main():

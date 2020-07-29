@@ -1,0 +1,22 @@
+_BASE_: "../Base-RCNN-FPN.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  MASK_ON: True
+  RESNETS:
+    DEPTH: 50
+  ROI_HEADS:
+    NUM_CLASSES: 1
+  RETINANET:
+    NUM_CLASSES: 1
+  SEM_SEG_HEAD:
+    NUM_CLASSES: 1
+SOLVER:
+  STEPS: (210000, 250000)
+  MAX_ITER: 270000
+TEST:
+  AUG:
+    ENABLED: True
+DATASETS:
+  TRAIN: ("demo_train",)
+  TEST: ("demo_val",)
+OUTPUT_DIR: "../../data/DemoDataset/detectron2_prediction"

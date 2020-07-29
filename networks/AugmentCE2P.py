@@ -275,10 +275,10 @@ class Decoder_Module(nn.Module):
         return seg, x
 
 
-class ResNet(nn.Module):
+class ResNet_1out(nn.Module):
     def __init__(self, block, layers, num_classes):
         self.inplanes = 128
-        super(ResNet, self).__init__()
+        super(ResNet_1out, self).__init__()
         self.conv1 = conv3x3(3, 64, stride=2)
         self.bn1 = BatchNorm2d(64)
         self.relu1 = nn.ReLU(inplace=False)
@@ -349,6 +349,79 @@ class ResNet(nn.Module):
         # return ([parsing_result, fusion_result], [edge_result])
         return fusion_result
 
+class ResNet_3out(nn.Module):
+    def __init__(self, block, layers, num_classes):
+        self.inplanes = 128
+        super(ResNet_3out, self).__init__()
+        self.conv1 = conv3x3(3, 64, stride=2)
+        self.bn1 = BatchNorm2d(64)
+        self.relu1 = nn.ReLU(inplace=False)
+        self.conv2 = conv3x3(64, 64)
+        self.bn2 = BatchNorm2d(64)
+        self.relu2 = nn.ReLU(inplace=False)
+        self.conv3 = conv3x3(64, 128)
+        self.bn3 = BatchNorm2d(128)
+        self.relu3 = nn.ReLU(inplace=False)
+
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilation=2, multi_grid=(1, 1, 1))
+
+        self.context_encoding = PSPModule(2048, 512)
+
+        self.edge = Edge_Module()
+        self.decoder = Decoder_Module(num_classes)
+
+        self.fushion = nn.Sequential(
+            nn.Conv2d(1024, 256, kernel_size=1, padding=0, dilation=1, bias=False),
+            ABN(256),
+            # BatchNorm2d(256),
+            # LeakyReLU(),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(256, num_classes, kernel_size=1, padding=0, dilation=1, bias=True)
+        )
+
+    def _make_layer(self, block, planes, blocks, stride=1, dilation=1, multi_grid=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                BatchNorm2d(planes * block.expansion, affine=affine_par))
+
+        layers = []
+        generate_multi_grid = lambda index, grids: grids[index % len(grids)] if isinstance(grids, tuple) else 1
+        layers.append(block(self.inplanes, planes, stride, dilation=dilation, downsample=downsample,
+                            multi_grid=generate_multi_grid(0, multi_grid)))
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(
+                block(self.inplanes, planes, dilation=dilation, multi_grid=generate_multi_grid(i, multi_grid)))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.relu1(self.bn1(self.conv1(x)))
+        x = self.relu2(self.bn2(self.conv2(x)))
+        x = self.relu3(self.bn3(self.conv3(x)))
+        x = self.maxpool(x)
+        x2 = self.layer1(x)
+        x3 = self.layer2(x2)
+        x4 = self.layer3(x3)
+        x5 = self.layer4(x4)
+        x = self.context_encoding(x5)
+        parsing_result, parsing_fea = self.decoder(x, x2)
+        # Edge Branch
+        edge_result, edge_fea = self.edge(x2, x3, x4)
+        # Fusion Branch
+        x = torch.cat([parsing_fea, edge_fea], dim=1)
+        fusion_result = self.fushion(x)
+        # return [[parsing_result, fusion_result], [edge_result]]
+        return ([parsing_result, fusion_result], [edge_result])
+        # return fusion_result
 
 def initialize_pretrained_model(model, settings, pretrained='./models/resnet101-imagenet.pth'):
     model.input_space = settings['input_space']
@@ -367,8 +440,15 @@ def initialize_pretrained_model(model, settings, pretrained='./models/resnet101-
         model.load_state_dict(new_params)
 
 
-def resnet101(num_classes=20, pretrained='./models/resnet101-imagenet.pth'):
-    model = ResNet(Bottleneck, [3, 4, 23, 3], num_classes)
+def resnet101_1out(num_classes=20, pretrained='./models/resnet101-imagenet.pth'):
+    model = ResNet_1out(Bottleneck, [3, 4, 23, 3], num_classes)
+    settings = pretrained_settings['resnet101']['imagenet']
+    initialize_pretrained_model(model, settings, pretrained)
+    return model
+
+
+def resnet101_3out(num_classes=20, pretrained='./models/resnet101-imagenet.pth'):
+    model = ResNet_3out(Bottleneck, [3, 4, 23, 3], num_classes)
     settings = pretrained_settings['resnet101']['imagenet']
     initialize_pretrained_model(model, settings, pretrained)
     return model

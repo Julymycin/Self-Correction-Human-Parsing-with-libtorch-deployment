@@ -263,11 +263,11 @@ def multi_process(a, args):
     ######### loading outputs from gloabl and local models #########
     global_output = np.load(os.path.join(args.global_output_dir, os.path.splitext(img_name)[0] + '.npy'))
 
-    msrcnn_output = patch2img_output(args.msrcnn_output_dir, img_name, img_height, img_width, msrcnn_bbox,
-                                     bbox_type='msrcnn', num_class=20)
+    # msrcnn_output = patch2img_output(args.mask_output_dir, img_name, img_height, img_width, msrcnn_bbox,
+    #                                  bbox_type='msrcnn', num_class=20)
 
     gt_output = patch2img_output(args.gt_output_dir, img_name, img_height, img_width, msrcnn_bbox, bbox_type='msrcnn',
-                                 num_class=20)
+                                 num_class=7)
 
     #### global and local branch logits fusion #####
 #     fused_output = global_output + msrcnn_output + gt_output
