@@ -52,8 +52,6 @@ from detectron2.data.datasets import register_coco_instances
 #                         "../../demo/img")
 
 
-
-
 class Trainer(DefaultTrainer):
     """
     We use the "DefaultTrainer" which contains pre-defined default logic for
@@ -62,7 +60,6 @@ class Trainer(DefaultTrainer):
     "SimpleTrainer", or write your own training loop. You can use
     "tools/plain_train_net.py" as an example.
     """
-
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
         """
@@ -83,20 +80,21 @@ class Trainer(DefaultTrainer):
                     num_classes=cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES,
                     ignore_label=cfg.MODEL.SEM_SEG_HEAD.IGNORE_VALUE,
                     output_dir=output_folder,
-                )
-            )
+                ))
         if evaluator_type in ["coco", "coco_panoptic_seg"]:
-            evaluator_list.append(COCOEvaluator(dataset_name, cfg, True, output_folder))
+            evaluator_list.append(
+                COCOEvaluator(dataset_name, cfg, True, output_folder))
         if evaluator_type == "coco_panoptic_seg":
-            evaluator_list.append(COCOPanopticEvaluator(dataset_name, output_folder))
+            evaluator_list.append(
+                COCOPanopticEvaluator(dataset_name, output_folder))
         if evaluator_type == "cityscapes_instance":
             assert (
-                    torch.cuda.device_count() >= comm.get_rank()
+                torch.cuda.device_count() >= comm.get_rank()
             ), "CityscapesEvaluator currently do not work with multiple machines."
             return CityscapesInstanceEvaluator(dataset_name)
         if evaluator_type == "cityscapes_sem_seg":
             assert (
-                    torch.cuda.device_count() >= comm.get_rank()
+                torch.cuda.device_count() >= comm.get_rank()
             ), "CityscapesEvaluator currently do not work with multiple machines."
             return CityscapesSemSegEvaluator(dataset_name)
         elif evaluator_type == "pascal_voc":
@@ -106,9 +104,7 @@ class Trainer(DefaultTrainer):
         if len(evaluator_list) == 0:
             raise NotImplementedError(
                 "no Evaluator for the dataset {} with the type {}".format(
-                    dataset_name, evaluator_type
-                )
-            )
+                    dataset_name, evaluator_type))
         elif len(evaluator_list) == 1:
             return evaluator_list[0]
         return DatasetEvaluators(evaluator_list)
@@ -121,9 +117,10 @@ class Trainer(DefaultTrainer):
         logger.info("Running inference with test-time augmentation ...")
         model = GeneralizedRCNNWithTTA(cfg, model)
         evaluators = [
-            cls.build_evaluator(
-                cfg, name, output_folder=os.path.join(cfg.OUTPUT_DIR, "inference_TTA")
-            )
+            cls.build_evaluator(cfg,
+                                name,
+                                output_folder=os.path.join(
+                                    cfg.OUTPUT_DIR, "inference_TTA"))
             for name in cfg.DATASETS.TEST
         ]
         res = cls.test(cfg, model, evaluators)
@@ -143,22 +140,21 @@ def setup(args, cfg_modify):
     return cfg
 
 
-def infer(args,cfg_modify,src_dir,anno_file):
-    register_coco_instances(args.dataset+"_train", {}, anno_file,src_dir)
-    register_coco_instances(args.dataset+"_val", {}, anno_file,src_dir)
-    
+def infer(args, cfg_modify, src_dir, anno_file):
+    register_coco_instances(args.dataset + "_train", {}, anno_file, src_dir)
+    register_coco_instances(args.dataset + "_val", {}, anno_file, src_dir)
+
     cfg = setup(args, cfg_modify)
-    
 
     model = Trainer.build_model(cfg)
     DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
-        cfg.MODEL.WEIGHTS, resume=args.resume
-    )
+        cfg.MODEL.WEIGHTS, resume=args.resume)
     res = Trainer.test(cfg, model)
+    torch.cuda.empty_cache()
     if cfg.TEST.AUG.ENABLED:
         res.update(Trainer.test_with_TTA(cfg, model))
     if comm.is_main_process():
-        
+
         verify_results(cfg, res)
     return res
 

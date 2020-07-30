@@ -28,6 +28,7 @@ import networks
 from utils.miou import compute_mean_ioU
 from utils.transforms import BGR2RGB_transform
 from utils.transforms import transform_parsing, transform_logits
+from utils.transforms import get_affine_transform
 from global_local_parsing.global_local_datasets import CropDataValSet
 
 
@@ -81,34 +82,10 @@ def get_arguments():
     return parser.parse_args()
 
 
-def get_palette(num_cls):
-    """ Returns the color map for visualizing the segmentation mask.
-    Args:
-        num_cls: Number of classes
-    Returns:
-        The color map
-    """
-    n = num_cls
-    palette = [0] * (n * 3)
-    for j in range(0, n):
-        lab = j
-        palette[j * 3 + 0] = 0
-        palette[j * 3 + 1] = 0
-        palette[j * 3 + 2] = 0
-        i = 0
-        while lab:
-            palette[j * 3 + 0] |= (((lab >> 0) & 1) << (7 - i))
-            palette[j * 3 + 1] |= (((lab >> 1) & 1) << (7 - i))
-            palette[j * 3 + 2] |= (((lab >> 2) & 1) << (7 - i))
-            i += 1
-            lab >>= 3
-    return palette
-
-
 def multi_scale_testing(model,
                         batch_input_im,
                         crop_size=[473, 473],
-                        flip=True,
+                        flip=False,
                         multi_scales=[1]):
     flipped_idx = (15, 14, 17, 16, 19, 18)
     if len(batch_input_im.shape) > 4:
@@ -148,7 +125,6 @@ def multi_scale_testing(model,
 def glparsing(data_dir, split_name, schp_ckpt, log_dir, file_list):
     """Create the model and start the evaluation process."""
     args = get_arguments()
-    multi_scales = [float(i) for i in args.multi_scales.split(',')]
     gpus = [int(i) for i in args.gpu.split(',')]
     assert len(gpus) == 1
     if not args.gpu == 'None':
@@ -184,31 +160,6 @@ def glparsing(data_dir, split_name, schp_ckpt, log_dir, file_list):
             transforms.Normalize(mean=IMAGE_MEAN, std=IMAGE_STD),
         ])
 
-    # Data loader
-    local_test_dataset = CropDataValSet(data_dir,
-                                        split_name[0],
-                                        crop_size=input_size,
-                                        transform=transform,
-                                        flip=args.flip)
-    local_num_samples = len(local_test_dataset)
-    print('local testing sample numbers: {}'.format(local_num_samples))
-    local_testloader = data.DataLoader(local_test_dataset,
-                                       batch_size=args.batch_size,
-                                       shuffle=False,
-                                       pin_memory=True)
-
-    global_test_dataset = CropDataValSet(data_dir,
-                                         split_name[1],
-                                         crop_size=input_size,
-                                         transform=transform,
-                                         flip=args.flip)
-    global_num_samples = len(global_test_dataset)
-    print('global testing sample numbers: {}'.format(global_num_samples))
-    global_testloader = data.DataLoader(global_test_dataset,
-                                        batch_size=args.batch_size,
-                                        shuffle=False,
-                                        pin_memory=True)
-
     # Load model weight
     state_dict = torch.load(schp_ckpt)
     model.load_state_dict(state_dict)
@@ -216,110 +167,41 @@ def glparsing(data_dir, split_name, schp_ckpt, log_dir, file_list):
     model.cuda()
     model.eval()
 
-    local_sp_results_dir = os.path.join(log_dir, split_name[0] + '_parsing')
-    if not os.path.exists(local_sp_results_dir):
-        os.makedirs(local_sp_results_dir)
-
-    global_sp_results_dir = os.path.join(log_dir, split_name[1] + '_parsing')
-    if not os.path.exists(global_sp_results_dir):
-        os.makedirs(global_sp_results_dir)
-
-    palette = get_palette(20)
-    parsing_preds = []
-    # local_scales = np.zeros((local_num_samples, 2), dtype=np.float32)
-    # local_centers = np.zeros((local_samples, 2), dtype=np.int32)
     with torch.no_grad():
-        for idx, meta in file_list:
+        for idx, meta in enumerate(file_list):
             src_name = meta['im_name']
             src = cv2.imread(os.path.join(data_dir, 'src_imgs', src_name),
                              cv2.IMREAD_COLOR)
-            parsing_results=[]
-            for i in range(len(meta['person_bbox']) + 1):
+            parsing_results = []
+            for i in range(meta['person_num'] + 1):
                 if i == 0:
                     img = src
                 else:
                     x_min, y_min, x_max, y_max = meta['person_bbox'][i - 1]
                     img = src[y_min:y_max + 1, x_min:x_max + 1, :]
-                h, w, _ = img.shape
-                c = [h / 2, w / 2]
-                temps = max(w, h) - 1
+                height, width, _ = img.shape
+                c = np.array([height / 2, width / 2], dtype=np.float32)
+                temps = max(width, height) - 1
                 s = np.array([temps * 1.0, temps * 1.0], dtype=np.float32)
+                r = 0
+                trans = get_affine_transform(c, s, r, input_size)
+                img = cv2.warpAffine(img,
+                                     trans,
+                                     (int(input_size[1]), int(input_size[0])),
+                                     flags=cv2.INTER_LINEAR,
+                                     borderMode=cv2.BORDER_CONSTANT,
+                                     borderValue=(0, 0, 0))
+                img = transform(img)
                 parsing, logits = multi_scale_testing(
                     model,
                     img.cuda(),
                     crop_size=input_size,
                     flip=args.flip,
-                    multi_scales=multi_scales)
+                )
                 parsing[parsing != 2] = 0
-                parsing_result = transform_parsing(parsing, c, s, w, h,
+                parsing_result = transform_parsing(parsing, c, s, width, height,
                                                    input_size)
                 parsing_results.append(parsing_result)
-            meta['parsing_results']=parsing_results
-            
+            meta['parsing_results'] = parsing_results
 
-    with torch.no_grad():
-        for idx, batch in enumerate(tqdm(local_testloader)):
-            image, meta = batch
-            if (len(image.shape) > 4):
-                image = image.squeeze()
-            im_name = meta['name'][0]
-            c = meta['center'].numpy()[0]
-            s = meta['scale'].numpy()[0]
-            w = meta['width'].numpy()[0]
-            h = meta['height'].numpy()[0]
-            # scales[idx, :] = s
-            # centers[idx, :] = c
-            parsing, logits = multi_scale_testing(model,
-                                                  image.cuda(),
-                                                  crop_size=input_size,
-                                                  flip=args.flip,
-                                                  multi_scales=multi_scales)
-
-            if args.save_results:
-                # parsing_result = transform_parsing(parsing, c, s, w, h, input_size)
-                # parsing_result_path = os.path.join(local_sp_results_dir, im_name + '.png')
-                # output_im = PILImage.fromarray(np.asarray(parsing_result, dtype=np.uint8))
-                # output_im.putpalette(palette)
-                # output_im.save(parsing_result_path)
-
-                # save logits
-                logits_result = transform_logits(logits, c, s, w, h,
-                                                 input_size)
-                logits_result_path = os.path.join(local_sp_results_dir,
-                                                  im_name + '.npy')
-                np.save(logits_result_path, logits_result)
-
-        for idx, batch in enumerate(tqdm(global_testloader)):
-            image, meta = batch
-            if (len(image.shape) > 4):
-                image = image.squeeze()
-            im_name = meta['name'][0]
-            c = meta['center'].numpy()[0]
-            s = meta['scale'].numpy()[0]
-            w = meta['width'].numpy()[0]
-            h = meta['height'].numpy()[0]
-            # scales[idx, :] = s
-            # centers[idx, :] = c
-            parsing, logits = multi_scale_testing(model,
-                                                  image.cuda(),
-                                                  crop_size=input_size,
-                                                  flip=args.flip,
-                                                  multi_scales=multi_scales)
-
-            if args.save_results:
-                # parsing_result = transform_parsing(parsing, c, s, w, h, input_size)
-                # parsing_result_path = os.path.join(global_sp_results_dir, im_name + '.png')
-                # output_im = PILImage.fromarray(np.asarray(parsing_result, dtype=np.uint8))
-                # output_im.putpalette(palette)
-                # output_im.save(parsing_result_path)
-                # save logits
-                logits_result = transform_logits(logits, c, s, w, h,
-                                                 input_size)
-                logits_result_path = os.path.join(global_sp_results_dir,
-                                                  im_name + '.npy')
-                np.save(logits_result_path, logits_result)
-    return
-
-
-if __name__ == '__main__':
-    main()
+    return file_list

@@ -118,7 +118,7 @@ def get_palette(num_cls):
     return palette
 
 
-def patch2img_output(patch_dir, img_name, img_height, img_width, bbox,
+def patch2img_output(parsing_results, img_name, img_height, img_width, bbox,
                      bbox_type, num_class):
     """transform bbox patch outputs to image output"""
     assert bbox_type == 'gt' or 'msrcnn'
@@ -127,11 +127,11 @@ def patch2img_output(patch_dir, img_name, img_height, img_width, bbox,
     count_predictions = np.zeros((img_height, img_width, num_class),
                                  dtype='int32')
     for i in range(len(bbox)):  # person index starts from 1
-        file_path = os.path.join(
-            patch_dir,
-            os.path.splitext(img_name)[0] + '_' + str(i + 1) + '_' +
-            bbox_type + '.npy')
-        bbox_output = np.load(file_path)
+        bbox_parsing = parsing_results[i + 1]
+        temp = np.ones(bbox_parsing.shape)
+        bbox_output = np.array([temp, bbox_parsing])
+        bbox_output = bbox_output.transpose(1, 2, 0)
+
         output[bbox[i][1]:bbox[i][3] + 1, bbox[i][0]:bbox[i][2] + 1,
                1:] += bbox_output[:, :, 1:]
         count_predictions[bbox[i][1]:bbox[i][3] + 1, bbox[i][0]:bbox[i][2] + 1,
@@ -216,7 +216,7 @@ def compute_confidence(im_name, feature_map, class_map, instance_label,
 
 
 def result_saving(fused_output, img_name, img_height, img_width, output_dir,
-                  mask_output_path, bbox_score, msrcnn_bbox):
+                  instance_masks, bbox_score, msrcnn_bbox):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -238,7 +238,8 @@ def result_saving(fused_output, img_name, img_height, img_width, output_dir,
                               dsize=(img_width, img_height),
                               interpolation=cv2.INTER_LINEAR)
     seg_pred = np.asarray(np.argmax(fused_output, axis=2), dtype=np.uint8)
-    masks = np.load(mask_output_path)
+    # masks = np.load(mask_output_path)
+    masks = instance_masks
     masks[np.where(seg_pred == 0)] = 0
 
     panoptic_seg_mask = masks
@@ -250,18 +251,18 @@ def result_saving(fused_output, img_name, img_height, img_width, output_dir,
     compute_confidence(img_name, fused_output, class_map, instance_pred,
                        instance_root, panoptic_seg_mask, seg_score_list)
 
-    ins_seg_results = open(
-        os.path.join(tag_dir,
-                     os.path.splitext(img_name)[0] + '.txt'), "a")
-    keep_human_id_list = list(np.unique(panoptic_seg_mask))
-    if 0 in keep_human_id_list:
-        keep_human_id_list.remove(0)
-    for i in keep_human_id_list:
-        ins_seg_results.write('{:.6f} {} {} {} {}\n'.format(
-            seg_score_list[i - 1], int(msrcnn_bbox[i - 1][1]),
-            int(msrcnn_bbox[i - 1][0]), int(msrcnn_bbox[i - 1][3]),
-            int(msrcnn_bbox[i - 1][2])))
-    ins_seg_results.close()
+    # ins_seg_results = open(
+    #     os.path.join(tag_dir,
+    #                  os.path.splitext(img_name)[0] + '.txt'), "a")
+    # keep_human_id_list = list(np.unique(panoptic_seg_mask))
+    # if 0 in keep_human_id_list:
+    #     keep_human_id_list.remove(0)
+    # for i in keep_human_id_list:
+    #     ins_seg_results.write('{:.6f} {} {} {} {}\n'.format(
+    #         seg_score_list[i - 1], int(msrcnn_bbox[i - 1][1]),
+    #         int(msrcnn_bbox[i - 1][0]), int(msrcnn_bbox[i - 1][3]),
+    #         int(msrcnn_bbox[i - 1][2])))
+    # ins_seg_results.close()
 
     output_im_global = PILImage.fromarray(seg_pred)
     output_im_instance = PILImage.fromarray(instance_pred)
@@ -281,36 +282,37 @@ def result_saving(fused_output, img_name, img_height, img_width, output_dir,
                      os.path.splitext(img_name)[0] + '.png'))
 
 
-def multi_process(a, gp_dir, lp_dir, mask_dir, save_dir):
+def multi_process(a, mask_dir, save_dir):
     img_name = a['im_name']
     img_height = a['img_height']
     img_width = a['img_width']
     msrcnn_bbox = a['person_bbox']
     bbox_score = a['person_bbox_score']
+    parsing_results = a['parsing_results']
+    instance_masks = a['instance_masks']
 
-    ######### loading outputs from gloabl and local models #########
-    global_output = np.load(os.path.join(gp_dir, os.path.splitext(img_name)[0] + '.npy'))
+    global_parsing = parsing_results[0]
+    temp = np.ones(global_parsing.shape)
+    global_output = np.array([temp, global_parsing])
+    global_output = global_output.transpose(1, 2, 0)
 
     # msrcnn_output = patch2img_output(args.mask_output_dir, img_name, img_height, img_width, msrcnn_bbox,
     #                                  bbox_type='msrcnn', num_class=20)
 
-    gt_output = patch2img_output(lp_dir,
-                                 img_name,
-                                 img_height,
-                                 img_width,
-                                 msrcnn_bbox,
-                                 bbox_type='msrcnn',
-                                 num_class=7)
+    local_output = patch2img_output(parsing_results,
+                                    img_name,
+                                    img_height,
+                                    img_width,
+                                    msrcnn_bbox,
+                                    bbox_type='msrcnn',
+                                    num_class=2)
 
     #### global and local branch logits fusion #####
     #     fused_output = global_output + msrcnn_output + gt_output
-    fused_output = global_output + gt_output
+    fused_output = global_output + local_output
 
-    mask_output_path = os.path.join(
-        mask_dir,
-        os.path.splitext(img_name)[0] + '_mask.npy')
     result_saving(fused_output, img_name, img_height, img_width, save_dir,
-                  mask_output_path, bbox_score, msrcnn_bbox)
+                  instance_masks, bbox_score, msrcnn_bbox)
     return
 
 
@@ -318,52 +320,14 @@ def multi_process(a, gp_dir, lp_dir, mask_dir, save_dir):
 
 
 def gl_fuse(
-    crop_json,
-    gp_dir,
-    lp_dir,
+    parsing_list,
     mask_dir,
     save_dir,
-    parsing_list
 ):
-    json_file = open(crop_json)
-    anno = json.load(json_file)['root']
-    for idx, meta in parsing_list:
-        
 
-    results = joblib.Parallel(n_jobs=8, verbose=0, pre_dispatch=16)([
-        joblib.delayed(multi_process)(a, gp_dir, lp_dir, mask_dir, save_dir)
-        for i, a in enumerate(anno)
-    ])
-
-
-def get_arguments():
-    parser = argparse.ArgumentParser(
-        description="obtain final prediction by logits fusion")
-    parser.add_argument("--test_json_path",
-                        type=str,
-                        default='./data/CIHP/cascade_152_finetune/test.json')
-    parser.add_argument(
-        "--global_output_dir",
-        type=str,
-        default='./data/CIHP/global/global_result-cihp-resnet101/global_output'
-    )
-    #     parser.add_argument("--msrcnn_output_dir", type=str,
-    #                         default='./data/CIHP/cascade_152__finetune/msrcnn_result-cihp-resnet101/msrcnn_output')
-    parser.add_argument(
-        "--gt_output_dir",
-        type=str,
-        default=
-        './data/CIHP/cascade_152__finetune/gt_result-cihp-resnet101/gt_output')
-    parser.add_argument("--mask_output_dir",
-                        type=str,
-                        default='./data/CIHP/cascade_152_finetune/mask')
-    parser.add_argument(
-        "--save_dir",
-        type=str,
-        default='./data/CIHP/fusion_results/cihp-msrcnn_finetune')
-    return parser.parse_args()
-
-
-if __name__ == '__main__':
-    args = get_arguments()
-    main(args)
+    # results = joblib.Parallel(n_jobs=8, verbose=0, pre_dispatch=16)([
+    #     joblib.delayed(multi_process)(a, mask_dir, save_dir)
+    #     for i, a in enumerate(parsing_list)
+    # ])
+    for i, a in enumerate(parsing_list):
+        multi_process(a, mask_dir, save_dir)

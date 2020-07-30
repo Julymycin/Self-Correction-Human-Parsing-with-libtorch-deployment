@@ -39,7 +39,8 @@ def make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, 
         score = instance['score']
         if score < args.conf_thres:
             break
-
+        if instance['category_id'] != 0:
+            break
         mask = mask_util.decode(instance['segmentation'])
         mask_area = mask.sum()
 
@@ -65,17 +66,17 @@ def make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, 
         x_max, y_max = x_min + box_w, y_min + box_h
         exp_x_min, exp_y_min, exp_x_max, exp_y_max = bbox_expand(img_h, img_w, [x_min, y_min, x_max, y_max],
                                                                  args.exp_ratio)
-        crop_img = img[exp_y_min:exp_y_max + 1, exp_x_min:exp_x_max + 1, :]
+        # crop_img = img[exp_y_min:exp_y_max + 1, exp_x_min:exp_x_max + 1, :]
         exp_bbox.append([exp_x_min, exp_y_min, exp_x_max, exp_y_max])
         ori_bbox.append([x_min, y_min, x_max, y_max])
-        bbox_name = os.path.splitext(img_name)[0] + '_' + str(person_idx) + '_msrcnn.jpg'
-        bbox_name_list.append(bbox_name)
+        # bbox_name = os.path.splitext(img_name)[0] + '_' + str(person_idx) + '_msrcnn.jpg'
+        # bbox_name_list.append(bbox_name)
 
-        cv2.imwrite(os.path.join(crop_save_dir, bbox_name), crop_img)
+        # cv2.imwrite(os.path.join(crop_save_dir, bbox_name), crop_img)
 
     assert person_idx > 0, 'image without instance'
-    mask_name = os.path.splitext(img_name)[0] + '_mask.npy'
-    np.save(os.path.join(mask_save_dir, mask_name), panoptic_seg)
+    # mask_name = os.path.splitext(img_name)[0] + '_mask.npy'
+    # np.save(os.path.join(mask_save_dir, mask_name), panoptic_seg)
 
     ############## json writing ##################
     item = {}
@@ -88,11 +89,13 @@ def make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, 
     item['person_bbox'] = exp_bbox
     item['real_person_bbox'] = ori_bbox
     item['person_bbox_score'] = bbox_score_list
-    item['bbox_name'] = bbox_name_list
-    item['mask_name'] = mask_name
-    file_list.append(item)
-    json_file = {'root': file_list}
-    return json_file, file_list
+    item['instance_masks'] = panoptic_seg
+    # item['bbox_name'] = bbox_name_list
+    # item['mask_name'] = mask_name
+    # file_list.append(item)
+    # json_file = {'root': file_list}
+    # return json_file, file_list
+    return item
 
 
 def get_arguments():
@@ -126,9 +129,12 @@ def crop(src_dir, crop_dir, anno_file, det_dir):
 
     file_list = []
     for img_info in tqdm(img_info_list['images']):
-        json_file, file_list = make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, args, src_dir)
-        with open(os.path.join(crop_dir, 'crop.json'), 'w') as f:
-            json.dump(json_file, f, indent=2)
+        # json_file, file_list = make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, args, src_dir)
+        file_list.append(make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, args, src_dir))
+
+        # with open(os.path.join(crop_dir, 'crop.json'), 'w') as f:
+        #     json.dump(json_file, f, indent=2)
+    return file_list
 
 
 if __name__ == '__main__':
