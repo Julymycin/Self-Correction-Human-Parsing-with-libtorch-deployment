@@ -81,8 +81,7 @@ def get_palette(num_cls):
     return palette
 
 
-def multi_scale_testing(model, batch_input_im, crop_size=[473, 473], flip=True, multi_scales=[1]):
-    flipped_idx = (15, 14, 17, 16, 19, 18)
+def multi_scale_testing(model, batch_input_im, crop_size=[473, 473], flip=False, multi_scales=[1]):
     if len(batch_input_im.shape) > 4:
         batch_input_im = batch_input_im.squeeze()
     if len(batch_input_im.shape) == 3:
@@ -96,11 +95,6 @@ def multi_scale_testing(model, batch_input_im, crop_size=[473, 473], flip=True, 
         parsing_output = model(scaled_im)
         parsing_output = parsing_output[0][-1]
         output = parsing_output[0]
-        if flip:
-            flipped_output = parsing_output[1]
-            flipped_output[14:20, :, :] = flipped_output[flipped_idx, :, :]
-            output += flipped_output.flip(dims=[-1])
-            output *= 0.5
         output = interp(output.unsqueeze(0))
         ms_outputs.append(output[0])
     ms_fused_parsing_output = torch.stack(ms_outputs)

@@ -5,6 +5,7 @@ import json
 import numpy as np
 from PIL import Image as PILImage
 import joblib
+import copy
 
 
 def mask_nms(masks,
@@ -128,7 +129,7 @@ def patch2img_output(parsing_results, img_name, img_height, img_width, bbox,
                                  dtype='int32')
     for i in range(len(bbox)):  # person index starts from 1
         bbox_parsing = parsing_results[i + 1]
-        temp = np.ones(bbox_parsing.shape)
+        temp = np.zeros(bbox_parsing.shape)
         bbox_output = np.array([temp, bbox_parsing])
         bbox_output = bbox_output.transpose(1, 2, 0)
 
@@ -216,13 +217,17 @@ def compute_confidence(im_name, feature_map, class_map, instance_label,
 
 
 def result_saving(fused_output, img_name, img_height, img_width, output_dir,
-                  instance_masks, bbox_score, msrcnn_bbox):
+                  instance_masks, bbox_score, msrcnn_bbox, data_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     global_root = os.path.join(output_dir, 'global_parsing')
     instance_root = os.path.join(output_dir, 'instance_parsing')
     tag_dir = os.path.join(output_dir, 'global_tag')
+
+    src_file = os.path.join(data_dir, 'src_imgs/' + img_name)
+    src = cv2.imread(src_file)
+    # src = PILImage.open(src_file)
 
     if not os.path.exists(global_root):
         os.makedirs(global_root)
@@ -239,50 +244,72 @@ def result_saving(fused_output, img_name, img_height, img_width, output_dir,
                               interpolation=cv2.INTER_LINEAR)
     seg_pred = np.asarray(np.argmax(fused_output, axis=2), dtype=np.uint8)
     # masks = np.load(mask_output_path)
-    masks = instance_masks
+    masks = copy.copy(instance_masks)
     masks[np.where(seg_pred == 0)] = 0
 
-    panoptic_seg_mask = masks
-    seg_score_list = bbox_score
-
-    instance_pred, class_map = get_instance(seg_pred, panoptic_seg_mask)
-    refine(instance_pred, panoptic_seg_mask, seg_pred, class_map)
-
-    compute_confidence(img_name, fused_output, class_map, instance_pred,
-                       instance_root, panoptic_seg_mask, seg_score_list)
-
-    # ins_seg_results = open(
-    #     os.path.join(tag_dir,
-    #                  os.path.splitext(img_name)[0] + '.txt'), "a")
-    # keep_human_id_list = list(np.unique(panoptic_seg_mask))
-    # if 0 in keep_human_id_list:
-    #     keep_human_id_list.remove(0)
-    # for i in keep_human_id_list:
-    #     ins_seg_results.write('{:.6f} {} {} {} {}\n'.format(
-    #         seg_score_list[i - 1], int(msrcnn_bbox[i - 1][1]),
-    #         int(msrcnn_bbox[i - 1][0]), int(msrcnn_bbox[i - 1][3]),
-    #         int(msrcnn_bbox[i - 1][2])))
-    # ins_seg_results.close()
-
-    output_im_global = PILImage.fromarray(seg_pred)
-    output_im_instance = PILImage.fromarray(instance_pred)
-    output_im_tag = PILImage.fromarray(panoptic_seg_mask)
-    output_im_global.putpalette(palette)
-    output_im_instance.putpalette(palette)
-    output_im_tag.putpalette(palette)
-
-    output_im_global.save(
-        os.path.join(global_root,
-                     os.path.splitext(img_name)[0] + '.png'))
-    output_im_instance.save(
+    instance_test = seg_pred*instance_masks
+    instance_test = cv2.cvtColor(instance_test, cv2.COLOR_GRAY2BGR)
+    instance_test[:, :, 0] = np.where(
+        instance_test[:, :, 0] != 0,
+        255 / instance_test.max() * instance_test[:, :, 0], 0)
+    instance_test[:, :, 1] = np.where(
+        instance_test[:, :, 1] != 0,
+        255 / instance_test.max() * instance_test[:, :, 1], 0)
+    cv2.imwrite(
         os.path.join(instance_root,
-                     os.path.splitext(img_name)[0] + '.png'))
-    output_im_tag.save(
-        os.path.join(tag_dir,
-                     os.path.splitext(img_name)[0] + '.png'))
+                     os.path.splitext(img_name)[0] + '_test.png'), instance_test)
+
+#     panoptic_seg_mask = masks
+#     seg_score_list = bbox_score
+
+#     instance_pred, class_map = get_instance(seg_pred, panoptic_seg_mask)
+#     # refine(instance_pred, panoptic_seg_mask, seg_pred, class_map)
+
+#     compute_confidence(img_name, fused_output, class_map, instance_pred,
+#                        instance_root, panoptic_seg_mask, seg_score_list)
+
+#     # ins_seg_results = open(
+#     #     os.path.join(tag_dir,
+#     #                  os.path.splitext(img_name)[0] + '.txt'), "a")
+#     # keep_human_id_list = list(np.unique(panoptic_seg_mask))
+#     # if 0 in keep_human_id_list:
+#     #     keep_human_id_list.remove(0)
+#     # for i in keep_human_id_list:
+#     #     ins_seg_results.write('{:.6f} {} {} {} {}\n'.format(
+#     #         seg_score_list[i - 1], int(msrcnn_bbox[i - 1][1]),
+#     #         int(msrcnn_bbox[i - 1][0]), int(msrcnn_bbox[i - 1][3]),
+#     #         int(msrcnn_bbox[i - 1][2])))
+#     # ins_seg_results.close()
+
+#     output_im_global = PILImage.fromarray(seg_pred)
+#     output_im_instance = PILImage.fromarray(instance_pred)
+#     output_im_tag = PILImage.fromarray(panoptic_seg_mask)
+#     output_im_global.putpalette(palette)
+#     output_im_instance.putpalette(palette)
+#     output_im_tag.putpalette(palette)
+
+#     # tt = cv2.cvtColor(instance_pred, cv2.COLOR_GRAY2BGR)
+
+#     src[:, :, 0] = np.where(instance_pred == 0, src[:, :, 0], 255)
+#     src[:, :, 1] = np.where(masks == 0, src[:, :, 1], 255)
+#     src[:, :, 2] = np.where(instance_masks == 0, src[:, :, 2], 255)
+#     # src[np.where(instance_pred != 0), 0] = 255
+
+#     output_im_global.save(
+#         os.path.join(global_root,
+#                      os.path.splitext(img_name)[0] + '.png'))
+#     output_im_instance.save(
+#         os.path.join(instance_root,
+#                      os.path.splitext(img_name)[0] + '.png'))
+#     cv2.imwrite(
+#         os.path.join(instance_root,
+#                      os.path.splitext(img_name)[0] + '_mask.png'), src)
+#     output_im_tag.save(
+#         os.path.join(tag_dir,
+#                      os.path.splitext(img_name)[0] + '.png'))
 
 
-def multi_process(a, mask_dir, save_dir):
+def multi_process(a, mask_dir, save_dir, data_dir):
     img_name = a['im_name']
     img_height = a['img_height']
     img_width = a['img_width']
@@ -292,7 +319,7 @@ def multi_process(a, mask_dir, save_dir):
     instance_masks = a['instance_masks']
 
     global_parsing = parsing_results[0]
-    temp = np.ones(global_parsing.shape)
+    temp = np.zeros(global_parsing.shape)
     global_output = np.array([temp, global_parsing])
     global_output = global_output.transpose(1, 2, 0)
 
@@ -312,7 +339,7 @@ def multi_process(a, mask_dir, save_dir):
     fused_output = global_output + local_output
 
     result_saving(fused_output, img_name, img_height, img_width, save_dir,
-                  instance_masks, bbox_score, msrcnn_bbox)
+                  instance_masks, bbox_score, msrcnn_bbox, data_dir)
     return
 
 
@@ -323,6 +350,7 @@ def gl_fuse(
     parsing_list,
     mask_dir,
     save_dir,
+    data_dir,
 ):
 
     # results = joblib.Parallel(n_jobs=8, verbose=0, pre_dispatch=16)([
@@ -330,4 +358,4 @@ def gl_fuse(
     #     for i, a in enumerate(parsing_list)
     # ])
     for i, a in enumerate(parsing_list):
-        multi_process(a, mask_dir, save_dir)
+        multi_process(a, mask_dir, save_dir, data_dir)

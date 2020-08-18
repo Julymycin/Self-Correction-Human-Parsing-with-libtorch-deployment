@@ -6,12 +6,14 @@ from collections import OrderedDict
 from PIL import Image as PILImage
 from utils.transforms import transform_parsing
 
-LABELS = ['Background', 'Hat', 'Hair', 'Glove', 'Sunglasses', 'Upper-clothes', 'Dress', 'Coat', \
-          'Socks', 'Pants', 'Jumpsuits', 'Scarf', 'Skirt', 'Face', 'Left-arm', 'Right-arm', 'Left-leg',
-          'Right-leg', 'Left-shoe', 'Right-shoe']
+# LABELS = ['Background', 'Hat', 'Hair', 'Glove', 'Sunglasses', 'Upper-clothes', 'Dress', 'Coat', \
+#           'Socks', 'Pants', 'Jumpsuits', 'Scarf', 'Skirt', 'Face', 'Left-arm', 'Right-arm', 'Left-leg',
+#           'Right-leg', 'Left-shoe', 'Right-shoe']
 
 
 # LABELS = ['Background', 'Head', 'Torso', 'Upper Arms', 'Lower Arms', 'Upper Legs', 'Lower Legs']
+LABELS = ['Background', 'Torso', ]
+
 
 def get_palette(num_cls):
     """ Returns the color map for visualizing the segmentation mask.
@@ -40,10 +42,10 @@ def get_palette(num_cls):
 
 def get_confusion_matrix(gt_label, pred_label, num_classes):
     """
-    Calcute the confusion matrix by given label and pred
+    Calculate the confusion matrix by given label and pred
     :param gt_label: the ground truth label
     :param pred_label: the pred label
-    :param num_classes: the nunber of class
+    :param num_classes: the number of class
     :return: the confusion matrix
     """
     index = (gt_label * num_classes + pred_label).astype('int32')
@@ -59,7 +61,7 @@ def get_confusion_matrix(gt_label, pred_label, num_classes):
     return confusion_matrix
 
 
-def compute_mean_ioU(preds, scales, centers, num_classes, datadir, input_size=[473, 473], dataset='val'):
+def compute_mean_ioU(preds, gts, scales, centers, num_classes, datadir, input_size=[473, 473], dataset='val'):
     val_file = os.path.join(datadir, dataset + '_id.txt')
     val_id = [i_id.strip() for i_id in open(val_file)]
 
@@ -67,8 +69,9 @@ def compute_mean_ioU(preds, scales, centers, num_classes, datadir, input_size=[4
 
     for i, pred_out in enumerate(preds):
         im_name = val_id[i]
-        gt_path = os.path.join(datadir, dataset + '_segmentations', im_name + '.png')
-        gt = np.array(PILImage.open(gt_path))
+        # gt_path = os.path.join(datadir, dataset + '_segmentations', im_name + '.png')
+        # gt = np.array(PILImage.open(gt_path))
+        gt = gts[i].squeeze(0)
         h, w = gt.shape
         s = scales[i]
         c = centers[i]
@@ -95,7 +98,7 @@ def compute_mean_ioU(preds, scales, centers, num_classes, datadir, input_size=[4
     mean_IoU = IoU_array.mean()
     print('Pixel accuracy: %f \n' % pixel_accuracy)
     print('Mean accuracy: %f \n' % mean_accuracy)
-    print('Mean IU: %f \n' % mean_IoU)
+    print('Mean IoU: %f \n' % mean_IoU)
     name_value = []
 
     for i, (label, iou) in enumerate(zip(LABELS, IoU_array)):
@@ -103,7 +106,7 @@ def compute_mean_ioU(preds, scales, centers, num_classes, datadir, input_size=[4
 
     name_value.append(('Pixel accuracy', pixel_accuracy))
     name_value.append(('Mean accuracy', mean_accuracy))
-    name_value.append(('Mean IU', mean_IoU))
+    name_value.append(('Mean IoU', mean_IoU))
     name_value = OrderedDict(name_value)
     return name_value
 

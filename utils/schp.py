@@ -22,7 +22,7 @@ def moving_average(net1, net2, alpha=1):
 
 
 def _check_bn(module, flag):
-    if issubclass(module.__class__, modules.bn.InPlaceABNSync):
+    if issubclass(module.__class__, modules.bn.ABN):
         flag[0] = True
 
 
@@ -33,18 +33,18 @@ def check_bn(model):
 
 
 def reset_bn(module):
-    if issubclass(module.__class__, modules.bn.InPlaceABNSync):
+    if issubclass(module.__class__, modules.bn.ABN):
         module.running_mean = torch.zeros_like(module.running_mean)
         module.running_var = torch.ones_like(module.running_var)
 
 
 def _get_momenta(module, momenta):
-    if issubclass(module.__class__, modules.bn.InPlaceABNSync):
+    if issubclass(module.__class__, modules.bn.ABN):
         momenta[module] = module.momentum
 
 
 def _set_momenta(module, momenta):
-    if issubclass(module.__class__, modules.bn.InPlaceABNSync):
+    if issubclass(module.__class__, modules.bn.ABN):
         module.momentum = momenta[module]
 
 

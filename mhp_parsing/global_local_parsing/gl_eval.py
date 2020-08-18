@@ -198,9 +198,10 @@ def glparsing(data_dir, split_name, schp_ckpt, log_dir, file_list):
                     crop_size=input_size,
                     flip=args.flip,
                 )
-                parsing[parsing != 2] = 0
-                parsing_result = transform_parsing(parsing, c, s, width, height,
-                                                   input_size)
+                # parsing = np.where((parsing < 2) | (parsing > 3), 0, 1)
+                parsing = np.where(parsing != 2, 0, 1)
+                parsing_result = transform_parsing(parsing, c, s, width,
+                                                   height, input_size)
                 parsing_results.append(parsing_result)
             meta['parsing_results'] = parsing_results
 

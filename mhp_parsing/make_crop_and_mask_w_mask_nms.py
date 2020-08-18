@@ -13,18 +13,25 @@ def bbox_expand(img_height, img_width, bbox, exp_ratio):
     exp_y = (y_max - y_min) * ((exp_ratio - 1) / 2)
     new_x_min = 0 if x_min - exp_x < 0 else np.round(x_min - exp_x)
     new_y_min = 0 if y_min - exp_y < 0 else np.round(y_min - exp_y)
-    new_x_max = img_width - 1 if x_max + exp_x > img_width - 1 else np.round(x_max + exp_x)
-    new_y_max = img_height - 1 if y_max + exp_y > img_height - 1 else np.round(y_max + exp_y)
+    new_x_max = img_width - 1 if x_max + exp_x > img_width - 1 else np.round(
+        x_max + exp_x)
+    new_y_max = img_height - 1 if y_max + exp_y > img_height - 1 else np.round(
+        y_max + exp_y)
     return int(new_x_min), int(new_y_min), int(new_x_max), int(new_y_max)
 
 
-def make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, args, src_dir):
-    img_name = img_info['file_name']
-    img_id = img_info['id'] - 1  # img_info['id'] start form 1
-    img_w = img_info['width']
-    img_h = img_info['height']
+def make_crop_and_mask(img_info, file_list, crop_save_dir, mask_save_dir, args,
+                       src_dir):
+    # img_name = img_info['file_name']
+    img_path = img_info['img_path']
+    # img_id = img_info['id'] - 1  # img_info['id'] start form 1
+    # img_w = img_info['width']
+    # img_h = img_info['height']
+    instances = img_info['instances']
+    img_h, img_w = instances.image_size
 
-    img = cv2.imread(os.path.join(src_dir, img_name))
+    # img = cv2.imread(os.path.join(src_dir, img_name))
+    img = cv2.imread(img_path)
 
     exp_bbox = []
     ori_bbox = []
@@ -33,15 +40,17 @@ def make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, 
     person_idx = 0
 
     panoptic_seg = np.zeros((img_h, img_w), dtype=np.uint8)
-    assert len(pred[img_id]['instances']) > 0, 'image without instance prediction'
+    assert len(instances) > 0, 'image without instance prediction'
 
-    for instance in pred[img_id]['instances']:
-        score = instance['score']
+    for i in range(len(instances)):
+        score = instances.scores[i].cpu().numpy()
+        category = instances.pred_classes[i]
         if score < args.conf_thres:
-            break
-        if instance['category_id'] != 0:
-            break
-        mask = mask_util.decode(instance['segmentation'])
+            continue
+        if category != 0:
+            continue
+        # mask = mask_util.decode(instances.pred_masks[i])
+        mask = instances.pred_masks[i].cpu()
         mask_area = mask.sum()
 
         if mask_area == 0:  # if mask_area < img_w*img_h/1000:
@@ -61,11 +70,13 @@ def make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, 
 
         bbox_score_list.append(score)
 
-        ins_bbox = instance['bbox']  # [x,y,w,h] format
-        x_min, y_min, box_w, box_h = ins_bbox
-        x_max, y_max = x_min + box_w, y_min + box_h
-        exp_x_min, exp_y_min, exp_x_max, exp_y_max = bbox_expand(img_h, img_w, [x_min, y_min, x_max, y_max],
-                                                                 args.exp_ratio)
+        # ins_bbox = instance['bbox']  # [x,y,w,h] format
+        ins_bbox = instances.pred_boxes[i]  # Boxes[x1,y1,x2,y2]
+        # x_min, y_min, box_w, box_h = ins_bbox
+        # x_max, y_max = x_min + box_w, y_min + box_h
+        x_min, y_min, x_max, y_max = ins_bbox.tensor[0].cpu()
+        exp_x_min, exp_y_min, exp_x_max, exp_y_max = bbox_expand(
+            img_h, img_w, [x_min, y_min, x_max, y_max], args.exp_ratio)
         # crop_img = img[exp_y_min:exp_y_max + 1, exp_x_min:exp_x_max + 1, :]
         exp_bbox.append([exp_x_min, exp_y_min, exp_x_max, exp_y_max])
         ori_bbox.append([x_min, y_min, x_max, y_max])
@@ -81,7 +92,8 @@ def make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, 
     ############## json writing ##################
     item = {}
     item['dataset'] = 'CIHP'
-    item['im_name'] = img_name
+    item['im_name'] = img_path.split('/')[-1]
+    item['img_path'] = img_path
     item['img_height'] = img_h
     item['img_width'] = img_w
     item['center'] = [img_h / 2, img_w / 2]
@@ -99,26 +111,32 @@ def make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, 
 
 
 def get_arguments():
-    parser = argparse.ArgumentParser(description="crop person val/test demo for inference")
+    parser = argparse.ArgumentParser(
+        description="crop person val/test demo for inference")
     parser.add_argument("--exp_ratio", type=float, default=1.2)
     parser.add_argument("--overlap_threshold", type=float, default=0.5)
     parser.add_argument("--conf_thres", type=float, default=0.5)
-    parser.add_argument("--img_dir", type=str,
+    parser.add_argument("--img_dir",
+                        type=str,
                         default='./data/DemoDataset/global_pic')
-    parser.add_argument("--save_dir", type=str,
-                        default='./data/DemoDataset')
-    parser.add_argument("--img_list", type=str,
-                        default='./data/DemoDataset/msrcnn_finetune_annotations/Demo.json')
-    parser.add_argument("--det_res", type=str,
-                        default='./data/DemoDataset/detectron2_prediction/inference/instances_predictions.pth')
+    parser.add_argument("--save_dir", type=str, default='./data/DemoDataset')
+    parser.add_argument(
+        "--img_list",
+        type=str,
+        default='./data/DemoDataset/msrcnn_finetune_annotations/Demo.json')
+    parser.add_argument(
+        "--det_res",
+        type=str,
+        default='./data/DemoDataset/detectron2_prediction/inference/instances_predictions.pth'
+    )
     return parser.parse_args()
 
 
-def crop(src_dir, crop_dir, anno_file, det_dir):
+def crop(src_dir, crop_dir, detect_list):
 
-    args=get_arguments()
-    img_info_list = json.load(open(anno_file, encoding='UTF-8'))
-    pred = torch.load(os.path.join(det_dir,'inference/instances_predictions.pth'))
+    args = get_arguments()
+    # img_info_list = json.load(open(anno_file, encoding='UTF-8'))
+    # pred = torch.load(os.path.join(det_dir,'inference/instances_predictions.pth'))
 
     crop_save_dir = os.path.join(crop_dir, 'crop_pic')
     if not os.path.exists(crop_save_dir):
@@ -128,9 +146,11 @@ def crop(src_dir, crop_dir, anno_file, det_dir):
         os.makedirs(mask_save_dir)
 
     file_list = []
-    for img_info in tqdm(img_info_list['images']):
+    for img_info in tqdm(detect_list):
         # json_file, file_list = make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, args, src_dir)
-        file_list.append(make_crop_and_mask(img_info, pred, file_list, crop_save_dir, mask_save_dir, args, src_dir))
+        file_list.append(
+            make_crop_and_mask(img_info, file_list, crop_save_dir,
+                               mask_save_dir, args, src_dir))
 
         # with open(os.path.join(crop_dir, 'crop.json'), 'w') as f:
         #     json.dump(json_file, f, indent=2)
