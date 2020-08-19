@@ -3,7 +3,7 @@
 ![Python 3.6](https://img.shields.io/badge/python-3.6-green.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-**This repo aims to deploy these model with pretrained checpoint to libtorch.**
+**This repo aims to deploy these models with pretrained checkpoint to libtorch.**
 
 * Note that replacing InPlaceABN layers with ABN layers will cost about 80% more GPU memory.
 
