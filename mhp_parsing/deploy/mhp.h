@@ -32,6 +32,16 @@
 **************************************************************************/
 struct img_item
 {   
+    /***
+     * code
+     * 0 Succeed
+     * 1 Empty input
+     * 2 Image height or width is not divisibility of 32
+     * 3 Region threshold is bigger than image height
+     * 4 No eligible objects in mask rcnn
+     * 
+    ***/
+    int code;
     int person_idx;
     int img_height;
     int img_width;
@@ -126,10 +136,10 @@ public:
         Function Name: Mask_RCNN::run()
         Function Description： 
             Statement of running Mask_RCNN inference and processing result. 
-        inputs: cv::Mat
+        inputs: cv::Mat, float threshold
         outputs: img_item
     **************************************************************************/
-    img_item run(cv::Mat &input);
+    img_item run(cv::Mat &inp, float threshold=0.0);
 };
 
 

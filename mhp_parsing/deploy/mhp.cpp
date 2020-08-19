@@ -169,21 +169,37 @@ int Mask_RCNN::load_net(std::string init_model_file, std::string predict_model_f
         Expand bboxes to 1.5 times bigger.
     inputs: 
         cv::Mat &inp: the split image
+        float threshold: the value of region threshold, default=0.0
     outputs: 
         img_item 
         Includeing img's height, width, center, number of person, bboxes, 
             expanded bboxes, confidence score and panoptic segmentation mask.
 **************************************************************************/
-img_item Mask_RCNN::run(cv::Mat &inp)
+img_item Mask_RCNN::run(cv::Mat &inp, float threshold)
 {
-
+    img_item item; // img_item struct to store the inference result
+    if(inp.empty()){
+        item.person_idx=0;
+        item.code=1;
+        return item;
+    }
     cv::Mat input=inp.clone();
     int height = input.rows;
     int width = input.cols;
-    img_item item; // img_item struct to store the inference result
+    
 
     // FPN models require divisibility of 32
-    assert(height % 32 == 0 && width % 32 == 0);
+    if(height % 32 != 0 || width % 32 != 0){
+        item.person_idx=0;
+        item.code=2;
+        return item;
+    }
+    // region threshold must be less than height
+    if(threshold>height){
+        item.person_idx=0;
+        item.code=3;
+        return item;
+    }
     // mask rcnn model requires 1 batch and 3 channel to infer
     const int batch = 1;
     const int channels = 3;
@@ -245,9 +261,12 @@ img_item Mask_RCNN::run(cv::Mat &inp)
         int label = labels.data<float>()[i]; // the classification of the bbox
         // if confidece score is too low, or the class is not 'person', 
         // skip them
-        if (score < 0.6 || label != 0)
+        if (score < 0.6 || label != 0 )
             continue; 
         const float* box = bbox.data<float>() + i * 4; // bbox
+        // if y_max of the box is less than threshold, skip
+        if (box[3]<threshold)
+            continue;
 		
 
         const float* mask = mask_probs.data<float>() +
@@ -306,8 +325,10 @@ img_item Mask_RCNN::run(cv::Mat &inp)
     if (person_idx == 0)
     {
         item.person_idx=person_idx;
+        item.code=4;
         return item;
     }
+    item.code=0;
     item.person_idx=person_idx;
     item.img_height = img_h;
     item.img_width = img_w;
@@ -449,7 +470,7 @@ cv::Mat parsing_fusion(img_item item){
     // fuse global parsing result and local parsing result
     for(int i=1;i<parsing_results.size();i++){
         cv::Mat temp_parsing=parsing_results[i];
-
+        // use Rect to locate the bbox in the original size image
         int temp_height=temp_parsing.rows;
         int temp_width=temp_parsing.cols;
         int temp_x1=msrcnn_bbox[i-1][0];
@@ -486,7 +507,7 @@ std::map<int,int> res_pos(cv::Mat result_frame, int person_idx){
     for(int i=0;i<result_frame.cols;i++){
         for(int j=0;j<result_frame.rows;j++){
             auto cur_value=result_frame.at<uchar>(j, i);
-            if(cur_value!=0){
+            if(cur_value>0){
                 // If the non-zero vlaue hasn't appeared before, store it.
                 if(pos.find(cur_value)==pos.end()){
                     pos[cur_value]=i;

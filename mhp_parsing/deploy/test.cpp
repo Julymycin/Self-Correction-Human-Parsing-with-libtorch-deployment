@@ -52,6 +52,7 @@ int main()
     cv::Mat parsing=parsing_fusion(gl_parsing(item,hp_bg_frame,pascal_module));
     std::map<int,int> pos=res_pos(parsing, item.person_idx);
     std::cout<<pos<<endl;
+    std::cout<<"item code: "<<item.code<<endl;
     parsing=parsing*255/5;
     end=get_timestamp();
     cout<<"---"<<(end-start)/1.0<<endl;

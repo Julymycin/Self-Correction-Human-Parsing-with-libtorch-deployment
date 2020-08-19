@@ -14,13 +14,18 @@ find_package(OpenCV REQUIRED)
 # include_directories(${OpenCV_INCLUDE_DIRS} /home/qiu/intel/compilers_and_libraries_2020/linux/mkl/include /home/qiu/Downloads/protobuf-3.11.4/src)
 # include_directories(${OpenCV_INCLUDE_DIRS} /home/qiu/intel/compilers_and_libraries_2020/linux/mkl/include /home/qiu/Downloads/protobuf-3.6.1/src)
 include_directories(${OpenCV_INCLUDE_DIRS} /home/qiu/intel/compilers_and_libraries_2020/linux/mkl/include)
-link_directories(/home/qiu/Projects/Self-Correction-Human-Parsing/mhp_parsing/deploy/)
+link_directories(
+    # /home/qiu/Projects/Self-Correction-Human-Parsing/mhp_parsing/deploy/ 
+    /home/qiu/Projects/Self-Correction-Human-Parsing/mhp_parsing/deploy/build/    
+    )
 message(STATUS "Pytorch status:")
 message(STATUS "libraries: ${TORCH_LIBRARIES}")
 message(STATUS "libraries: ${OpenCV_LIBS}")
 
 # add_library(mhp SHARED mhp.cpp)
+# target_link_libraries(mhp "${TORCH_LIBRARIES}" "${OpenCV_LIBS}" gflags glog protobuf -lprotobuf)
 add_executable(mhp test.cpp)
 target_link_libraries(mhp "${TORCH_LIBRARIES}" "${OpenCV_LIBS}" gflags glog protobuf -lprotobuf -lmhp)
+
 
 set_property(TARGET mhp PROPERTY CXX_STANDARD 14)
